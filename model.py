@@ -1,6 +1,3 @@
-# Streamlit educational metabolic simulation for sickle cell disease
-# This module stores simplified equations and model logic for the educational simulation.
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -36,7 +33,6 @@ class ModelState:
 
 
 def enforce_fraction_pair(glycolysis_fraction: float, ppp_fraction: float) -> tuple[float, float]:
-    """Keep the pair within biologically meaningful bounds and ensure total does not exceed 1."""
     glycolysis_fraction = max(0.0, min(float(glycolysis_fraction), 1.0))
     ppp_fraction = max(0.0, min(float(ppp_fraction), 1.0))
 
@@ -47,7 +43,6 @@ def enforce_fraction_pair(glycolysis_fraction: float, ppp_fraction: float) -> tu
 
 
 def compute_fluxes(state: ModelState) -> Dict[str, float]:
-    """Compute a single model output set using simplified model equations."""
     glyco, ppp = enforce_fraction_pair(state.glycolysis_fraction, state.ppp_fraction)
 
     glycolysis_flux = state.total_glucose_flux * glyco
@@ -79,7 +74,6 @@ def sensitivity_analysis(
     bpg_coefficient: float,
     ppp_values: List[float] | None = None,
 ) -> pd.DataFrame:
-    """Create a sensitivity table for PPP fractions between 0.05 and 0.30."""
     if ppp_values is None:
         ppp_values = np.linspace(0.05, 0.30, 11).tolist()
 
@@ -96,64 +90,20 @@ def sensitivity_analysis(
             ros_protection_coefficient=ros_protection_coefficient,
             bpg_coefficient=bpg_coefficient,
         )
-        output = compute_fluxes(state)
-        rows.append(
-            {
-                "PPP_fraction": round(ppp, 4),
-                "PPP_flux": round(output["ppp_flux"], 4),
-                "Glycolysis_fraction": round(output["glycolysis_fraction"], 4),
-                "ATP": round(output["ATP"], 4),
-                "NADPH": round(output["NADPH"], 4),
-                "ROS": round(output["ROS"], 4),
-                "2,3-BPG": round(output["2,3-BPG"], 4),
-            }
-        )
+        out = compute_fluxes(state)
+        rows.append({
+            "PPP_fraction": round(ppp, 4),
+            "PPP_flux": round(out["ppp_flux"], 4),
+            "Glycolysis_fraction": round(out["glycolysis_fraction"], 4),
+            "ATP": round(out["ATP"], 4),
+            "NADPH": round(out["NADPH"], 4),
+            "ROS": round(out["ROS"], 4),
+            "2,3-BPG": round(out["2,3-BPG"], 4),
+        })
     return pd.DataFrame(rows)
 
 
-def compare_scenarios() -> Dict[str, Dict[str, float]]:
-    """Return the baseline scenario definitions used in the dashboard."""
-    normal = ModelState(
-        total_glucose_flux=100,
-        glycolysis_fraction=0.90,
-        ppp_fraction=0.10,
-        disease_stress=1.0,
-        atp_coefficient=0.50,
-        nadph_coefficient=0.80,
-        ros_protection_coefficient=0.35,
-        bpg_coefficient=0.45,
-    )
-    scd = ModelState(
-        total_glucose_flux=100,
-        glycolysis_fraction=0.95,
-        ppp_fraction=0.05,
-        disease_stress=1.8,
-        atp_coefficient=0.50,
-        nadph_coefficient=0.80,
-        ros_protection_coefficient=0.35,
-        bpg_coefficient=0.45,
-    )
-    intervention = ModelState(
-        total_glucose_flux=100,
-        glycolysis_fraction=0.80,
-        ppp_fraction=0.20,
-        disease_stress=1.4,
-        atp_coefficient=0.50,
-        nadph_coefficient=0.80,
-        ros_protection_coefficient=0.35,
-        bpg_coefficient=0.45,
-    )
-
-    outputs = {
-        "Normal RBC": compute_fluxes(normal),
-        "SCD-like": compute_fluxes(scd),
-        "Simulated Intervention": compute_fluxes(intervention),
-    }
-    return outputs
-
-
 def preset_values() -> Dict[str, Dict[str, float]]:
-    """Return preset control values for the Streamlit app."""
     return {
         "Normal RBC": {
             "total_glucose_flux": 100.0,
@@ -193,17 +143,15 @@ def scenario_dataframe(states: Dict[str, Dict[str, float]]) -> pd.DataFrame:
     for name, values in states.items():
         model = ModelState(**values)
         output = compute_fluxes(model)
-        rows.append(
-            {
-                "Scenario": name,
-                "Glycolysis": round(output["glycolysis_fraction"], 4),
-                "PPP": round(output["ppp_fraction"], 4),
-                "ATP": round(output["ATP"], 4),
-                "NADPH": round(output["NADPH"], 4),
-                "ROS": round(output["ROS"], 4),
-                "2,3-BPG": round(output["2,3-BPG"], 4),
-            }
-        )
+        rows.append({
+            "Scenario": name,
+            "Glycolysis": round(output["glycolysis_fraction"], 4),
+            "PPP": round(output["ppp_fraction"], 4),
+            "ATP": round(output["ATP"], 4),
+            "NADPH": round(output["NADPH"], 4),
+            "ROS": round(output["ROS"], 4),
+            "2,3-BPG": round(output["2,3-BPG"], 4),
+        })
     return pd.DataFrame(rows)
 
 
@@ -220,30 +168,7 @@ def equation_text() -> List[str]:
 
 
 def validate_state(glycolysis_fraction: float, ppp_fraction: float) -> tuple[float, float]:
-    """Ensure the two fractions satisfy the model assumption glycolysis + PPP = 1 where possible."""
     glyco, ppp = enforce_fraction_pair(glycolysis_fraction, ppp_fraction)
-    total = glyco + ppp
-    if total < 1.0:
+    if glyco + ppp < 1.0:
         ppp = 1.0 - glyco
     return glyco, ppp
-
-
-__all__ = [
-    "BASELINE_ROS",
-    "ModelState",
-    "compute_fluxes",
-    "enforce_fraction_pair",
-    "validate_state",
-    "sensitivity_analysis",
-    "compare_scenarios",
-    "preset_values",
-    "scenario_dataframe",
-    "equation_text",
-]
-
-
-if __name__ == "__main__":
-    print("Model module loaded successfully.")
-    print("Example outputs:")
-    st = ModelState(100, 0.9, 0.1, 1.0, 0.5, 0.8, 0.35, 0.45)
-    print(compute_fluxes(st))

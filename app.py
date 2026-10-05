@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
 import streamlit as st
 
 from model import (
     ModelState,
-    compare_scenarios,
     compute_fluxes,
     equation_text,
     preset_values,
@@ -20,7 +17,7 @@ from plots import create_comparison_plot, create_pathway_figure, plot_sensitivit
 st.set_page_config(page_title="SCD RBC Metabolic Simulation", layout="wide")
 
 
-def set_default_state() -> dict:
+def default_state() -> dict:
     return {
         "total_glucose_flux": 100.0,
         "glycolysis_fraction": 0.90,
@@ -34,19 +31,21 @@ def set_default_state() -> dict:
 
 
 if "settings" not in st.session_state:
-    st.session_state.settings = set_default_state()
+    st.session_state.settings = default_state()
 
 
-def apply_preset(name: str) -> None:
-    st.session_state.settings = preset_values()[name].copy()
+preset_names = ["Normal RBC", "SCD-like", "Simulated Intervention"]
+selected_preset = st.sidebar.selectbox("Preset condition", preset_names)
 
+if st.sidebar.button("Apply preset"):
+    st.session_state.settings = preset_values()[selected_preset].copy()
 
 st.title("In-Silico Metabolic Engineering of Red Blood Cell Metabolism in Sickle Cell Disease")
 st.caption("Educational simulation prototype for an undergraduate case study")
 
-st.markdown("""
-This dashboard is a simplified educational model. It is not a clinical model and does not predict patient outcomes or validate a therapy.
-""")
+st.markdown(
+    "This dashboard is a simplified educational model. It is not a clinical model and does not predict patient outcomes or validate a therapy."
+)
 
 st.markdown("## 1. PROJECT OVERVIEW")
 st.write(
@@ -54,28 +53,16 @@ st.write(
 )
 
 st.markdown("## 2. METABOLIC PATHWAY")
-with st.container():
-    st.markdown(
-        """
-        GLUCOSE
-           |
-           +---- GLYCOLYSIS ----> ATP
-           |
-           +---- PPP -----------> NADPH ----> Antioxidant protection
-           |
-           +---- 2,3-BPG branch
-        """
-    )
-
-    current_settings = st.session_state.settings
-    current_state = ModelState(**current_settings)
-    flux = compute_fluxes(current_state)
-    st.write(f"Current simulated glycolysis flux = {flux['glycolysis_flux']:.2f}")
-    st.write(f"Current simulated PPP flux = {flux['ppp_flux']:.2f}")
-    st.write(f"Current simulated ATP = {flux['ATP']:.2f}")
-    st.write(f"Current simulated NADPH = {flux['NADPH']:.2f}")
-    st.write(f"Current simulated ROS = {flux['ROS']:.2f}")
-    st.write(f"Current simulated 2,3-BPG = {flux['2,3-BPG']:.2f}")
+pathway_text = """
+GLUCOSE
+   |
+   +---- GLYCOLYSIS ----> ATP
+   |
+   +---- PPP -----------> NADPH ----> Antioxidant protection
+   |
+   +---- 2,3-BPG branch
+"""
+st.code(pathway_text, language="text")
 
 st.markdown("## 3. MODEL ASSUMPTIONS")
 st.markdown(
@@ -89,16 +76,9 @@ st.markdown(
 )
 
 st.markdown("## 4. SIMULATION CONTROLS")
-
-preset_options = ["Normal RBC", "SCD-like", "Simulated Intervention"]
-col1, col2, col3 = st.columns(3)
-for i, label in enumerate(preset_options):
-    with [col1, col2, col3][i]:
-        st.button(label, key=f"preset_{label}", on_click=apply_preset, args=(label,))
-
 settings = st.session_state.settings
 
-with st.form("simulation_form"):
+with st.form("sim_form"):
     total_glucose_flux = st.slider("Total glucose flux", 10.0, 200.0, value=float(settings["total_glucose_flux"]), step=1.0)
     glycolysis_fraction = st.slider("Glycolysis fraction", 0.0, 1.0, value=float(settings["glycolysis_fraction"]), step=0.01)
     ppp_fraction = st.slider("PPP fraction", 0.0, 1.0, value=float(settings["ppp_fraction"]), step=0.01)
@@ -113,32 +93,18 @@ with st.form("simulation_form"):
 if submitted:
     glycolysis_fraction, ppp_fraction = validate_state(glycolysis_fraction, ppp_fraction)
     st.session_state.settings = {
-        "total_glucose_flux": total_glucose_flux,
-        "glycolysis_fraction": glycolysis_fraction,
-        "ppp_fraction": ppp_fraction,
-        "disease_stress": disease_stress,
-        "atp_coefficient": atp_coefficient,
-        "nadph_coefficient": nadph_coefficient,
-        "ros_protection_coefficient": ros_protection_coefficient,
-        "bpg_coefficient": bpg_coefficient,
-    }
-else:
-    st.session_state.settings = {
-        "total_glucose_flux": float(settings["total_glucose_flux"]),
-        "glycolysis_fraction": float(settings["glycolysis_fraction"]),
-        "ppp_fraction": float(settings["ppp_fraction"]),
-        "disease_stress": float(settings["disease_stress"]),
-        "atp_coefficient": float(settings["atp_coefficient"]),
-        "nadph_coefficient": float(settings["nadph_coefficient"]),
-        "ros_protection_coefficient": float(settings["ros_protection_coefficient"]),
-        "bpg_coefficient": float(settings["bpg_coefficient"]),
+        "total_glucose_flux": float(total_glucose_flux),
+        "glycolysis_fraction": float(glycolysis_fraction),
+        "ppp_fraction": float(ppp_fraction),
+        "disease_stress": float(disease_stress),
+        "atp_coefficient": float(atp_coefficient),
+        "nadph_coefficient": float(nadph_coefficient),
+        "ros_protection_coefficient": float(ros_protection_coefficient),
+        "bpg_coefficient": float(bpg_coefficient),
     }
 
 current_state = ModelState(**st.session_state.settings)
 current_flux = compute_fluxes(current_state)
-
-if (current_state.glycolysis_fraction + current_state.ppp_fraction) > 1.0:
-    st.warning("The selected glycolysis and PPP fractions were adjusted to maintain the model assumption that glycolysis + PPP does not exceed 1.")
 
 st.markdown("## 5. NORMAL vs SCD vs INTERVENTION")
 scenario_data = scenario_dataframe({
@@ -173,7 +139,6 @@ scenario_data = scenario_dataframe({
         "bpg_coefficient": current_state.bpg_coefficient,
     },
 })
-
 st.dataframe(scenario_data, use_container_width=True)
 
 st.markdown("## 6. SENSITIVITY ANALYSIS")
@@ -230,13 +195,10 @@ st.markdown("## MODEL EQUATIONS")
 for eq in equation_text():
     st.write(eq)
 
+st.markdown("## PATHWAY VISUALIZATION")
 pathway_fig = create_pathway_figure(current_state)
 st.pyplot(pathway_fig)
 
-st.markdown("## DISCLAIMER")
 st.warning(
     "Educational purpose only: This simulation is a simplified educational model designed for teaching and hypothesis generation. It does not represent clinical care, treatment guidance, or validated patient-specific predictions."
 )
-
-if __name__ == "__main__":
-    pass
